@@ -82,6 +82,7 @@ $app->singleton(
 // $app->register(App\Providers\AuthServiceProvider::class);
 // $app->register(App\Providers\EventServiceProvider::class);
 $app->register(Illuminate\Redis\RedisServiceProvider::class);
+$app->register(Dingo\Api\Provider\LumenServiceProvider::class);
 
 /*
 |--------------------------------------------------------------------------
@@ -97,7 +98,7 @@ $app->register(Illuminate\Redis\RedisServiceProvider::class);
 $app->router->group([
     'namespace' => 'App\Http\Controllers',
 ], function ($router) {
-    require __DIR__.'/../routes/web.php';
+    require __DIR__.'/../routes/api.php';
 });
 
 return $app;
