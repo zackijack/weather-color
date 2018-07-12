@@ -21,7 +21,7 @@ if (!function_exists('object_to_array')) {
             */
             return array_map(__FUNCTION__, $data);
         } else {
-            // Return array
+            // Return array.
             return $data;
         }
     }
