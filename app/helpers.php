@@ -2,29 +2,27 @@
 
 if (!function_exists('object_to_array')) {
     /**
-     * Convert stdClass object to array
+     * Convert stdClass object to array.
      *
-     * @param object $object
+     * @param object|array $data
      * @return array
      */
-    function object_to_array($object)
+    function object_to_array($data)
     {
-        if (is_object($object)) {
-            // Gets the properties of the given object
-            // with get_object_vars function
-            $object = get_object_vars($object);
+        if (is_object($data)) {
+            // Gets the properties of the given object.
+            $data = get_object_vars($data);
         }
 
-        if (is_array($object)) {
+        if (is_array($data)) {
             /*
-            * Return array converted to object
-            * Using __FUNCTION__ (Magic constant)
-            * for recursive call
+            * Return array converted to object.
+            * Using __FUNCTION__ (Magic constant) for recursive call.
             */
-            return array_map(__FUNCTION__, $object);
+            return array_map(__FUNCTION__, $data);
         } else {
-            // Return array
-            return $object;
+            // Return array.
+            return $data;
         }
     }
 }
