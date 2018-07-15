@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 use GuzzleHttp\Client as HttpClient;
 use Carbon\Carbon;
 use Dingo\Api\Exception\ValidationHttpException;
@@ -42,50 +43,56 @@ class WeatherController extends Controller
             throw new ValidationHttpException($validator->errors());
         }
 
-        if ($request->filled('datetime')) {
-            try {
-                $carbon = new Carbon($request->datetime);
-                $time = $carbon->timestamp;
-            } catch (\Exception $exp) {
-                throw new BadRequestHttpException($exp->getMessage());
+        $result = Cache::get('dark_sky:request:'.serialize($request->except(['only', 'except'])));
+
+        if (!$result) {
+            if ($request->filled('datetime')) {
+                try {
+                    $carbon = new Carbon($request->datetime);
+                    $time = $carbon->timestamp;
+                } catch (\Exception $exp) {
+                    throw new BadRequestHttpException($exp->getMessage());
+                }
+            } elseif ($request->filled('timestamp')) {
+                $time = $request->timestamp;
             }
-        } elseif ($request->filled('timestamp')) {
-            $time = $request->timestamp;
+
+            $path = isset($time) ? $request->latitude.','.$request->longitude.','.$time : $request->latitude.','.$request->longitude;
+
+            $darkSky = $this->http->get($path, [
+                'query' => [
+                    'lang' => $request->filled('language') ? $request->language : null,
+                    'units' => 'ca',
+                    'exclude' => 'minutely, hourly, daily, alerts, flags',
+                ],
+            ]);
+            $body = json_decode($darkSky->getBody());
+
+            if ($darkSky->getStatusCode() !== 200) {
+                throw new HttpException($body->code, $body->error);
+            }
+
+            $weather = $body->currently;
+
+            $temperature = round($weather->temperature);
+
+            $limit = env('WEATHER_TEMPERATURE_LIMIT');
+
+            // make sure the temparature isn't above the limit
+            $temperature = $temperature < $limit ? $temperature : $limit;
+
+            // determine the hue
+            $hue = 360 * ($temperature / $limit);
+
+            $result = [
+                'weather' => $weather,
+                'color' => [
+                    'hue' => $hue,
+                ],
+            ];
+
+            Cache::put('dark_sky:request:'.serialize($request->except(['only', 'except'])), $result, env('WEATHER_CACHE_MINUTES', 5));
         }
-
-        $path = isset($time) ? $request->latitude.','.$request->longitude.','.$time : $request->latitude.','.$request->longitude;
-
-        $darkSky = $this->http->get($path, [
-            'query' => [
-                'lang' => $request->filled('language') ? $request->language : null,
-                'units' => 'ca',
-                'exclude' => 'minutely, hourly, daily, alerts, flags',
-            ],
-        ]);
-        $body = json_decode($darkSky->getBody());
-
-        if ($darkSky->getStatusCode() !== 200) {
-            throw new HttpException($body->code, $body->error);
-        }
-
-        $weather = $body->currently;
-
-        $temperature = round($weather->temperature);
-
-        $limit = env('WEATHER_TEMPERATURE_LIMIT');
-
-        // make sure the temparature isn't above the limit
-        $temperature = $temperature < $limit ? $temperature : $limit;
-
-        // determine the hue
-        $hue = 360 * ($temperature / $limit);
-
-        $result = [
-            'weather' => $weather,
-            'color' => [
-                'hue' => $hue,
-            ],
-        ];
 
         $response = Response::ONE($request, $result, 'nested');
 
