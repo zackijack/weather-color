@@ -47,7 +47,6 @@ class WeatherController extends Controller
                 $carbon = new Carbon($request->datetime);
                 $time = $carbon->timestamp;
             } catch (\Exception $exp) {
-                dd($exp);
                 throw new BadRequestHttpException($exp->getMessage());
             }
         } elseif ($request->filled('timestamp')) {
