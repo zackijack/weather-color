@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\V1;
 
 use App\Http\Controllers\Controller;
+use App\Response;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use GuzzleHttp\Client as HttpClient;
-use App\Response;
+use Carbon\Carbon;
+use Dingo\Api\Exception\ValidationHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 class WeatherController extends Controller
 {
@@ -22,27 +26,50 @@ class WeatherController extends Controller
         $this->http = new HttpClient(['base_uri' => env('DARK_SKY_ENDPOINT').env('DARK_SKY_SECRET_KEY').'/', 'http_errors' => false]);
     }
 
-    public function forecast(Request $request)
+    public function weather(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'latitude' => 'bail|required|numeric',
             'longitude' => 'bail|required|numeric',
-            'only' => 'bail|string',
-            'except' => 'bail|string',
+            'datetime' => 'string',
+            'timestamp' => 'integer',
+            'language' => 'string',
+            'only' => 'string',
+            'except' => 'string',
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 400);
+            throw new ValidationHttpException($validator->errors());
         }
 
-        $forecast = $this->http->get($request->latitude.','.$request->longitude, [
+        if ($request->filled('datetime')) {
+            try {
+                $carbon = new Carbon($request->datetime);
+                $time = $carbon->timestamp;
+            } catch (\Exception $exp) {
+                dd($exp);
+                throw new BadRequestHttpException($exp->getMessage());
+            }
+        } elseif ($request->filled('timestamp')) {
+            $time = $request->timestamp;
+        }
+
+        $path = isset($time) ? $request->latitude.','.$request->longitude.','.$time : $request->latitude.','.$request->longitude;
+
+        $darkSky = $this->http->get($path, [
             'query' => [
+                'lang' => $request->filled('language') ? $request->language : null,
                 'units' => 'ca',
                 'exclude' => 'minutely, hourly, daily, alerts, flags',
             ],
         ]);
+        $body = json_decode($darkSky->getBody());
 
-        $weather = json_decode($forecast->getBody())->currently;
+        if ($darkSky->getStatusCode() !== 200) {
+            throw new HttpException($body->code, $body->error);
+        }
+
+        $weather = $body->currently;
 
         $temperature = round($weather->temperature);
 

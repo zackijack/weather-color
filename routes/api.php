@@ -14,5 +14,5 @@
 $api = app('Dingo\Api\Routing\Router');
 
 $api->version('v1', function ($api) {
-    $api->get('weathers', 'App\Http\Controllers\V1\WeatherController@forecast');
+    $api->get('weathers', 'App\Http\Controllers\V1\WeatherController@weather');
 });
