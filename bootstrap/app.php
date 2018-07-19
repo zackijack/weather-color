@@ -29,6 +29,18 @@ $app->withEloquent();
 
 /*
 |--------------------------------------------------------------------------
+| Load The Configurations
+|--------------------------------------------------------------------------
+|
+| Here we will load the configurations which are used to set or update
+| the default configuration of some libraries/packages.
+|
+*/
+
+$app->configure('debug-server');
+
+/*
+|--------------------------------------------------------------------------
 | Register Container Bindings
 |--------------------------------------------------------------------------
 |
@@ -84,6 +96,7 @@ $app->singleton(
 $app->register(Illuminate\Redis\RedisServiceProvider::class);
 $app->register(Dingo\Api\Provider\LumenServiceProvider::class);
 $app->register(Laravel\Tinker\TinkerServiceProvider::class);
+$app->register(BeyondCode\DumpServer\DumpServerServiceProvider::class);
 
 /*
 |--------------------------------------------------------------------------
