@@ -15,7 +15,8 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 class WeatherController extends Controller
 {
-    private $http;
+    private $darkSky;
+    private $google;
 
     /**
      * Create a new controller instance.
@@ -24,7 +25,8 @@ class WeatherController extends Controller
      */
     public function __construct()
     {
-        $this->http = new HttpClient(['base_uri' => env('DARK_SKY_ENDPOINT').env('DARK_SKY_SECRET_KEY').'/', 'http_errors' => false]);
+        $this->darkSky = new HttpClient(['base_uri' => env('DARK_SKY_ENDPOINT').env('DARK_SKY_SECRET_KEY').'/', 'http_errors' => false]);
+        $this->google = new HttpClient(['base_uri' => env('GOOGLE_GEOCODING_ENDPOINT'), 'http_errors' => false]);
     }
 
     public function weather(Request $request)
@@ -35,6 +37,7 @@ class WeatherController extends Controller
             'datetime' => 'string',
             'timestamp' => 'integer',
             'language' => 'string',
+            'geocoding' => 'boolean',
             'only' => 'string',
             'except' => 'string',
         ]);
@@ -43,7 +46,9 @@ class WeatherController extends Controller
             throw new ValidationHttpException($validator->errors());
         }
 
-        $result = Cache::get('dark_sky:request:'.serialize($request->except(['only', 'except'])));
+        $cacheId = json_encode($request->except(['only', 'except']));
+
+        $result = Cache::get('weather:request:'.$cacheId);
 
         if (!$result) {
             if ($request->filled('datetime')) {
@@ -57,22 +62,22 @@ class WeatherController extends Controller
                 $time = $request->timestamp;
             }
 
-            $path = isset($time) ? $request->latitude.','.$request->longitude.','.$time : $request->latitude.','.$request->longitude;
+            $darkSkyPath = isset($time) ? $request->latitude.','.$request->longitude.','.$time : $request->latitude.','.$request->longitude;
 
-            $darkSky = $this->http->get($path, [
+            $forecast = $this->darkSky->get($darkSkyPath, [
                 'query' => [
                     'lang' => $request->filled('language') ? $request->language : null,
                     'units' => 'ca',
                     'exclude' => 'minutely, hourly, daily, alerts, flags',
                 ],
             ]);
-            $body = json_decode($darkSky->getBody());
+            $forecastBody = json_decode($forecast->getBody());
 
-            if ($darkSky->getStatusCode() !== 200) {
-                throw new HttpException($body->code, $body->error);
+            if ($forecast->getStatusCode() !== 200) {
+                throw new HttpException($forecastBody->code, $forecastBody->error);
             }
 
-            $weather = $body->currently;
+            $weather = $forecastBody->currently;
 
             $temperature = round($weather->temperature);
 
@@ -91,7 +96,21 @@ class WeatherController extends Controller
                 ],
             ];
 
-            Cache::put('dark_sky:request:'.serialize($request->except(['only', 'except'])), $result, env('WEATHER_CACHE_MINUTES', 5));
+            // add geocoding if requested
+            if ($request->input('geocoding', false)) {
+                $geocoding = $this->google->get('json', [
+                    'query' => [
+                        'latlng' => $request->latitude.','.$request->longitude,
+                        'key' => env('GOOGLE_GEOCODING_API_KEY'),
+                    ],
+                ]);
+
+                $geocodingBody = json_decode($geocoding->getBody());
+
+                $result['geocode'] = head($geocodingBody->results);
+            }
+
+            Cache::put('weather:request:'.$cacheId, $result, env('WEATHER_CACHE_MINUTES', 5));
         }
 
         $response = Response::ONE($request, $result, 'nested');
