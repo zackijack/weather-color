@@ -46,7 +46,9 @@ class WeatherController extends Controller
             throw new ValidationHttpException($validator->errors());
         }
 
-        $result = Cache::get('weather:request:'.serialize($request->except(['only', 'except'])));
+        $cacheId = json_encode($request->except(['only', 'except']));
+
+        $result = Cache::get('weather:request:'.$cacheId);
 
         if (!$result) {
             if ($request->filled('datetime')) {
@@ -108,7 +110,7 @@ class WeatherController extends Controller
                 $result['geocode'] = head($geocodingBody->results);
             }
 
-            Cache::put('weather:request:'.serialize($request->except(['only', 'except'])), $result, env('WEATHER_CACHE_MINUTES', 5));
+            Cache::put('weather:request:'.$cacheId, $result, env('WEATHER_CACHE_MINUTES', 5));
         }
 
         $response = Response::ONE($request, $result, 'nested');
